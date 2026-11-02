@@ -123,6 +123,12 @@ The verifier must not depend on `android.graphics.Rect`. Pass it plain `id + tex
 - One step at a time, as asked. Don't run ahead into later steps.
 - After every step: `./gradlew assembleDebug` must pass, and `./gradlew testDebugUnitTest` once
   tests exist. Fix failures before saying you're done.
+- After every step, overwrite `PROGRESS.md` (keep it under 30 lines):
+  - Done: steps finished and working on the phone
+  - Next: the exact next step
+  - Broken / known issues
+  - Decisions that differ from this spec, and why
+  Another agent may take over from this file at any point, so keep it current.
 - Then tell me exactly what to try on the phone, and stop.
 - Keep files small and readable. No speculative abstractions, interfaces with one implementation,
   or "for later" code.
