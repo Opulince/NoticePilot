@@ -1,0 +1,2 @@
+# Copy to local.properties (never commit it). Android Studio also writes sdk.dir here.
+GEMINI_API_KEY=YOUR_GEMINI_API_KEY
