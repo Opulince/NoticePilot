@@ -24,6 +24,12 @@ object NpIcons {
     val Document: ImageVector by lazy {
         icon("Document", "M14,2H6c-1.1,0 -1.99,0.9 -1.99,2L4,20c0,1.1 0.89,2 1.99,2H18c1.1,0 2,-0.9 2,-2V8l-6,-6zM16,18H8v-2h8v2zM16,14H8v-2h8v2zM13,9V3.5L18.5,9H13z")
     }
+    val Pdf: ImageVector by lazy {
+        icon(
+            "Pdf",
+            "M20,2H8c-1.1,0 -2,0.9 -2,2v12c0,1.1 0.9,2 2,2h12c1.1,0 2,-0.9 2,-2V4c0,-1.1 -0.9,-2 -2,-2zM11.5,9.5c0,0.83 -0.67,1.5 -1.5,1.5H9v2H7.5V7H10c0.83,0 1.5,0.67 1.5,1.5v1zM16.5,11.5c0,0.83 -0.67,1.5 -1.5,1.5h-2.5V7H15c0.83,0 1.5,0.67 1.5,1.5v3zM20.5,8.5H19v1h1.5V11H19v2h-1.5V7h3v1.5zM9,9.5h1v-1H9v1zM4,6H2v14c0,1.1 0.9,2 2,2h14v-2H4V6zM14,11.5h1v-3h-1v3z"
+        )
+    }
     val Event: ImageVector by lazy {
         icon("Event", "M17,12h-5v5h5v-5zM16,1v2H8V1H6v2H5c-1.11,0 -1.99,0.9 -1.99,2L3,19c0,1.1 0.89,2 2,2h14c1.1,0 2,-0.9 2,-2V5c0,-1.1 -0.9,-2 -2,-2h-1V1h-2zM19,19H5V8h14v11z")
     }

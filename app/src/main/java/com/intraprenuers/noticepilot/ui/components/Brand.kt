@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.intraprenuers.noticepilot.R
@@ -29,7 +30,7 @@ object Brand {
 
 /** The NoticePilot wordmark (and logo, once [Brand.LOGO_RES] is set). */
 @Composable
-fun BrandMark(modifier: Modifier = Modifier) {
+fun BrandMark(modifier: Modifier = Modifier, logoSize: Dp = 30.dp) {
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
@@ -40,7 +41,8 @@ fun BrandMark(modifier: Modifier = Modifier) {
             Image(
                 painter = painterResource(logo),
                 contentDescription = null,
-                modifier = Modifier.size(30.dp).clip(RoundedCornerShape(7.dp))
+                // Square asset shown square (aspect ratio kept); corner clip matches the artwork's own rounding.
+                modifier = Modifier.size(logoSize).clip(RoundedCornerShape(logoSize * 0.2f))
             )
         }
         Text(

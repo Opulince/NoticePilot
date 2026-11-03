@@ -1,5 +1,6 @@
 package com.intraprenuers.noticepilot
 
+import android.content.ActivityNotFoundException
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -17,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.intraprenuers.noticepilot.calendar.CalendarIntents
 import com.intraprenuers.noticepilot.scan.DocumentScan
+import com.intraprenuers.noticepilot.scan.PdfPicker
 import com.intraprenuers.noticepilot.scan.PhotoPicker
 import com.intraprenuers.noticepilot.ui.ErrorScreen
 import com.intraprenuers.noticepilot.ui.MainViewModel
@@ -41,6 +43,10 @@ class MainActivity : ComponentActivity() {
         if (uri != null) viewModel.process(listOf(uri))
     }
 
+    private val pdfLauncher = registerForActivityResult(PdfPicker.contract) { uri ->
+        if (uri != null) viewModel.processPdf(uri) // null = user cancelled: stay on home
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -53,13 +59,14 @@ class MainActivity : ComponentActivity() {
                     when (val s = state) {
                         is UiState.Idle -> ScanScreen(
                             stage = null, notice = s.notice, recent = history,
-                            onScan = ::startScan, onPickPhoto = ::pickPhoto,
+                            onScan = ::startScan, onPickPhoto = ::pickPhoto, onImportPdf = ::importPdf,
                             onOpenNotice = viewModel::openNotice, onDeleteNotice = viewModel::deleteNotice
                         )
                         is UiState.Working -> ScanScreen(
                             stage = s.stage, notice = null, recent = emptyList(),
-                            onScan = {}, onPickPhoto = {},
-                            onOpenNotice = {}, onDeleteNotice = {}
+                            onScan = {}, onPickPhoto = {}, onImportPdf = {},
+                            onOpenNotice = {}, onDeleteNotice = {},
+                            progressDetail = s.detail, fromPdf = s.fromPdf
                         )
                         is UiState.Results -> {
                             val sourceId = s.sourceItemId
@@ -96,6 +103,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun pickPhoto() = pickLauncher.launch(PhotoPicker.imageRequest())
+
+    private fun importPdf() {
+        try {
+            pdfLauncher.launch(PdfPicker.mimeTypes)
+        } catch (e: ActivityNotFoundException) {
+            toast("No file picker found on this phone.")
+        }
+    }
 
     private fun addToCalendar(item: ResultItem) {
         if (!item.canAddToCalendar) return

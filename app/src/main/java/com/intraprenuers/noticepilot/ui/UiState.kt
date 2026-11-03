@@ -7,6 +7,7 @@ import com.intraprenuers.noticepilot.verify.Status
 
 /** Pipeline stages shown while working. Only the stage that is actually running is shown. */
 enum class Stage(val label: String) {
+    OPENING_PDF("Opening PDF..."),
     READING_TEXT("Reading text..."),
     EXTRACTING("Extracting information..."),
     VERIFYING("Verifying evidence..."),
@@ -34,8 +35,11 @@ sealed interface UiState {
     /** ScanScreen. [notice] is a one-off message such as "No text found" or "Scan cancelled". */
     data class Idle(val notice: String? = null) : UiState
 
-    /** ScanScreen with a progress indicator. */
-    data class Working(val stage: Stage) : UiState
+    /**
+     * ScanScreen with a progress indicator. [detail] is live progress such as "Page 2 of 5";
+     * [fromPdf] switches the first step from "Document captured" to "Opening PDF".
+     */
+    data class Working(val stage: Stage, val detail: String? = null, val fromPdf: Boolean = false) : UiState
 
     /**
      * ResultsScreen, or SourceScreen when [sourceItemId] is set.
@@ -46,7 +50,9 @@ sealed interface UiState {
         val items: List<ResultItem>,
         val sourceItemId: Int? = null,
         /** Id of the saved notice these results belong to, so edits are saved too. */
-        val noticeId: Long? = null
+        val noticeId: Long? = null,
+        /** One-off note about how the notice was read, e.g. PDF pages that were skipped. */
+        val note: String? = null
     ) : UiState
 
     /**

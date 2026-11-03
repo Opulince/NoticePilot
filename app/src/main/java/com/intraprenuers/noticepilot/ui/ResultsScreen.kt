@@ -90,10 +90,19 @@ fun ResultsScreen(
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = "${state.lines.size} lines read · ${state.items.size} ${if (state.items.size == 1) "item" else "items"} found",
+                        text = run {
+                            val pages = state.lines.map { it.page }.distinct().size
+                            val pagePart = if (pages > 1) "$pages pages · " else ""
+                            "$pagePart${state.lines.size} lines read · ${state.items.size} ${if (state.items.size == 1) "item" else "items"} found"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    val note = state.note
+                    if (note != null) {
+                        Spacer(Modifier.height(12.dp))
+                        NoteBanner(note)
+                    }
                     if (state.items.isNotEmpty()) {
                         Spacer(Modifier.height(16.dp))
                         Summary(verified.size, attention.size)
@@ -134,6 +143,18 @@ fun ResultsScreen(
                     ResultCard(item, onOpenSource, onAddToCalendar, onSaveEdit)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun NoteBanner(text: String) {
+    val c = StatusColors.approximate()
+    Surface(shape = NpShape.Card, color = c.container, contentColor = c.content, modifier = Modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(NpIcons.Warning, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(10.dp))
+            Text(text, style = MaterialTheme.typography.bodySmall)
         }
     }
 }

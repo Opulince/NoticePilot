@@ -65,11 +65,14 @@ fun ScanScreen(
     recent: List<SavedNotice>,
     onScan: () -> Unit,
     onPickPhoto: () -> Unit,
+    onImportPdf: () -> Unit,
     onOpenNotice: (Long) -> Unit,
-    onDeleteNotice: (Long) -> Unit
+    onDeleteNotice: (Long) -> Unit,
+    progressDetail: String? = null,
+    fromPdf: Boolean = false
 ) {
     if (stage != null) {
-        ProcessingView(stage)
+        ProcessingView(stage, progressDetail, fromPdf)
         return
     }
     var pendingDelete by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -82,7 +85,7 @@ fun ScanScreen(
     ) {
         item {
           Column {
-            BrandMark()
+            BrandMark(logoSize = 40.dp)
             Spacer(Modifier.height(36.dp))
             Text(
                 text = "School notices, turned into dates you can trust.",
@@ -109,15 +112,9 @@ fun ScanScreen(
                 Text("Scan notice", style = MaterialTheme.typography.titleMedium)
             }
             Spacer(Modifier.height(10.dp))
-            OutlinedButton(
-                onClick = onPickPhoto,
-                shape = NpShape.Control,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                modifier = Modifier.fillMaxWidth().height(52.dp)
-            ) {
-                Icon(NpIcons.Photo, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(10.dp))
-                Text("Import a photo")
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ImportButton("Import image", NpIcons.Photo, onPickPhoto, Modifier.weight(1f))
+                ImportButton("Import PDF", NpIcons.Pdf, onImportPdf, Modifier.weight(1f))
             }
             if (notice != null) {
                 Spacer(Modifier.height(16.dp))
@@ -157,6 +154,21 @@ fun ScanScreen(
             containerColor = MaterialTheme.colorScheme.surface,
             shape = NpShape.Card
         )
+    }
+}
+
+@Composable
+private fun ImportButton(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit, modifier: Modifier) {
+    OutlinedButton(
+        onClick = onClick,
+        shape = NpShape.Control,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        contentPadding = PaddingValues(horizontal = 12.dp),
+        modifier = modifier.height(52.dp)
+    ) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -290,9 +302,9 @@ private fun RecentRow(notice: SavedNotice, onOpen: () -> Unit, onDelete: () -> U
 
 /** Calm, honest progress: earlier steps are shown done only because they really finished. */
 @Composable
-private fun ProcessingView(stage: Stage) {
+private fun ProcessingView(stage: Stage, detail: String?, fromPdf: Boolean) {
     val steps = listOf(
-        "Document captured" to null,
+        if (fromPdf) "Opening PDF" to Stage.OPENING_PDF else "Document captured" to null,
         "Reading text" to Stage.READING_TEXT,
         "Extracting information" to Stage.EXTRACTING,
         "Verifying evidence" to Stage.VERIFYING,
@@ -309,7 +321,7 @@ private fun ProcessingView(stage: Stage) {
         Text("Working on your notice", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(6.dp))
         Text(
-            stage.label,
+            detail ?: stage.label,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -325,7 +337,11 @@ private fun ProcessingView(stage: Stage) {
                     StepRow(
                         label = label,
                         state = state,
-                        note = if (s == Stage.VERIFYING) "Every item is checked against the scanned text, word by word." else null
+                        note = when {
+                            s == Stage.VERIFYING -> "Every item is checked against the scanned text, word by word."
+                            s == Stage.READING_TEXT && state == StepState.CURRENT && detail != null -> detail
+                            else -> null
+                        }
                     )
                     if (i < steps.lastIndex) {
                         HorizontalDivider(

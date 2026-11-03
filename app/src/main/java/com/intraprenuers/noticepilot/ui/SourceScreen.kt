@@ -116,7 +116,10 @@ fun SourceScreen(lines: List<OcrLine>, item: ResultItem?, onBack: () -> Unit) {
         }
 
         if (item != null) {
-            EvidencePanel(item)
+            // Pages the cited lines are on, shown only for multi-page notices (PDFs, multi-page scans).
+            val multiPage = lines.map { it.page }.distinct().size > 1
+            val citedPages = if (multiPage) lines.filter { normalizeId(it.id) in citedIds }.map { it.page }.distinct() else emptyList()
+            EvidencePanel(item, citedPages)
         }
 
         if (lines.isEmpty()) {
@@ -221,7 +224,7 @@ private fun highlight(line: String, quote: String, strong: Color): AnnotatedStri
 
 /** What the AI claimed and why: the supporting quote set like a pull quote, then status and reasons. */
 @Composable
-private fun EvidencePanel(item: ResultItem) {
+private fun EvidencePanel(item: ResultItem, citedPages: List<Int>) {
     val checked = item.checked
     val accent = MaterialTheme.colorScheme.primary
     Surface(
@@ -263,8 +266,13 @@ private fun EvidencePanel(item: ResultItem) {
                 )
             }
             if (checked.item.lineIds.isNotEmpty()) {
+                val pagePart = when (citedPages.size) {
+                    0 -> ""
+                    1 -> " · page ${citedPages[0]}"
+                    else -> " · pages " + citedPages.joinToString(", ")
+                }
                 Text(
-                    text = "Cited lines " + checked.item.lineIds.joinToString(", ") { it.removePrefix("L") },
+                    text = "Cited lines " + checked.item.lineIds.joinToString(", ") { it.removePrefix("L") } + pagePart,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

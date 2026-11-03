@@ -9,6 +9,8 @@ import com.intraprenuers.noticepilot.extract.ExtractionException
 import com.intraprenuers.noticepilot.extract.GeminiExtractor
 import com.intraprenuers.noticepilot.ocr.OcrEngine
 import com.intraprenuers.noticepilot.ocr.OcrLine
+import com.intraprenuers.noticepilot.ocr.PdfException
+import com.intraprenuers.noticepilot.ocr.PdfLimits
 import com.intraprenuers.noticepilot.storage.NoticeStore
 import com.intraprenuers.noticepilot.storage.SavedNotice
 import com.intraprenuers.noticepilot.verify.SourceLine
@@ -43,6 +45,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** OCR lines of the last scan, kept so a failed Gemini call can be retried without rescanning. */
     private var lastLines: List<OcrLine> = emptyList()
+    private var lastNote: String? = null
+    private var lastFromPdf = false
     private var job: Job? = null
 
     init {
@@ -77,7 +81,47 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 return@launch
             }
             lastLines = lines
+            lastNote = null
+            lastFromPdf = false
             extractAndVerify(lines)
+        }
+    }
+
+    /** PDF import: every page (up to PdfLimits.MAX_PAGES) is rendered and OCR'd, then the same pipeline runs. */
+    fun processPdf(uri: Uri) {
+        job?.cancel()
+        job = viewModelScope.launch {
+            _state.value = UiState.Working(Stage.OPENING_PDF, fromPdf = true)
+            var totalPages = 0
+            val lines = try {
+                ocr.readPdf(
+                    uri,
+                    onOpened = { total -> totalPages = total },
+                    onPage = { page, toRead ->
+                        val more = if (totalPages > toRead) " (first $toRead of $totalPages)" else ""
+                        _state.value = UiState.Working(Stage.READING_TEXT, detail = "Reading page $page of $toRead$more", fromPdf = true)
+                    }
+                ).lines
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: PdfException) {
+                _state.value = UiState.Error(message = e.userMessage, detail = e.message)
+                return@launch
+            } catch (e: Exception) {
+                _state.value = UiState.Error(
+                    message = "Couldn't read this PDF. Try another file.",
+                    detail = "${e.javaClass.simpleName}: ${e.message}"
+                )
+                return@launch
+            }
+            if (lines.isEmpty()) {
+                _state.value = UiState.Idle("No readable text found in that PDF. If it's a faint scan, try scanning the paper copy instead.")
+                return@launch
+            }
+            lastLines = lines
+            lastNote = PdfLimits.skippedNote(totalPages)
+            lastFromPdf = true
+            extractAndVerify(lines, note = lastNote, fromPdf = true)
         }
     }
 
@@ -88,11 +132,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         job?.cancel()
-        job = viewModelScope.launch { extractAndVerify(lines) }
+        job = viewModelScope.launch { extractAndVerify(lines, note = lastNote, fromPdf = lastFromPdf) }
     }
 
-    private suspend fun extractAndVerify(lines: List<OcrLine>) {
-        _state.value = UiState.Working(Stage.EXTRACTING)
+    private suspend fun extractAndVerify(lines: List<OcrLine>, note: String? = null, fromPdf: Boolean = false) {
+        _state.value = UiState.Working(Stage.EXTRACTING, fromPdf = fromPdf)
         val source = lines.map { SourceLine(it.id, it.text) }
         val items = try {
             extractor.extract(source)
@@ -113,15 +157,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             )
             return
         }
-        _state.value = UiState.Working(Stage.VERIFYING)
+        _state.value = UiState.Working(Stage.VERIFYING, fromPdf = fromPdf)
         val checked = withContext(Dispatchers.Default) { Verifier.verifyAll(items, source) }
-        _state.value = UiState.Working(Stage.PREPARING)
+        _state.value = UiState.Working(Stage.PREPARING, fromPdf = fromPdf)
         val resultItems = checked.mapIndexed { i, c -> ResultItem(id = i, checked = c) }
         val now = System.currentTimeMillis()
         val notice = SavedNotice(id = now, savedAt = now, lines = lines, items = resultItems)
         _history.update { (listOf(notice) + it).take(NoticeStore.MAX_NOTICES) }
         persist()
-        _state.value = UiState.Results(lines, resultItems, noticeId = notice.id)
+        _state.value = UiState.Results(lines, resultItems, noticeId = notice.id, note = note)
     }
 
     /** Opens a previously scanned notice. */
