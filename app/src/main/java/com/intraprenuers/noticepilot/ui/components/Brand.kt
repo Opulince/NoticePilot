@@ -9,20 +9,22 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.intraprenuers.noticepilot.R
 
 /**
- * Branding integration point. When Siva's logo is ready:
- *  1. put it in app/src/main/res/drawable/ (e.g. noticepilot_logo.xml or .png)
- *  2. set LOGO_RES = R.drawable.noticepilot_logo  (import com.intraprenuers.noticepilot.R)
- * BrandMark then shows the logo next to the wordmark everywhere. Nothing else needs to change.
+ * Branding integration point. Siva's logo lives in res/drawable-nodpi/noticepilot_logo.png
+ * (the launcher icon uses res/drawable-nodpi/ic_launcher_foreground.png from the same artwork).
+ * To swap the logo, replace that PNG; set LOGO_RES = null to show the wordmark alone.
  */
 object Brand {
-    val LOGO_RES: Int? = null
+    val LOGO_RES: Int? = R.drawable.noticepilot_logo
 }
 
 /** The NoticePilot wordmark (and logo, once [Brand.LOGO_RES] is set). */
@@ -35,7 +37,11 @@ fun BrandMark(modifier: Modifier = Modifier) {
     ) {
         val logo = Brand.LOGO_RES
         if (logo != null) {
-            Image(painter = painterResource(logo), contentDescription = null, modifier = Modifier.size(28.dp))
+            Image(
+                painter = painterResource(logo),
+                contentDescription = null,
+                modifier = Modifier.size(30.dp).clip(RoundedCornerShape(7.dp))
+            )
         }
         Text(
             text = "NoticePilot",

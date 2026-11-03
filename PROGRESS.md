@@ -27,7 +27,9 @@
   - Source: reader-style lines with cited lines washed sage plus a green rule. The exact quote is semi-bold inside them (`QuoteMatch`), with a pull-quote evidence panel.
   - Error screen restyled; detail is shown in monospace.
   - Icons: `ui/components/Icons.kt` (Material path data, no dependency).
-  - Logo slot: `ui/components/Brand.kt`. Set `Brand.LOGO_RES = R.drawable.<siva_logo>` and every header shows it.
+- [x] **Siva's logo** (from the root `WhatsApp Image … .jpeg`):
+  - In-app: `res/drawable-nodpi/noticepilot_logo.png` (transparent corners), shown next to the wordmark through `Brand.LOGO_RES`.
+  - Launcher: an adaptive icon (`mipmap-anydpi-v26/ic_launcher*.xml` + `drawable-nodpi/ic_launcher_foreground.png`). The artwork is scaled into the 66dp safe zone and the gradient extended to the edges. Checked under circle and squircle masks.
 
 ## 3. Current Work
 - [ ] On-phone check: redesign, saved notices surviving an app restart, fallback (needs a real 503 to see it).
@@ -35,7 +37,7 @@
 ## 4. Next Actions
 1. Laptop: `git pull`, `./gradlew assembleDebug testDebugUnitTest`, `./gradlew installDebug`.
 2. Phone: scan → results → source → calendar → fix & confirm. Close the app fully, reopen, and check the notice is under Recent.
-3. Add Siva's logo via `Brand.LOGO_RES`. Add a launcher icon from the same asset (none yet; it's the default Android icon).
+3. Check the launcher icon and the header logo on the phone.
 
 ## 5. Architecture & Contracts
 - Flow: MainActivity → `MainViewModel.process(uris)` → `OcrEngine` → `GeminiExtractor` (model chain) → `Verifier.verifyAll` → `UiState.Results` + `SavedNotice` saved.
