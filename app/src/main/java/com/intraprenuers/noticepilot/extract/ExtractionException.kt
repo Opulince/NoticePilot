@@ -14,6 +14,7 @@ class ExtractionException(
             Kind.NO_INTERNET -> "No internet connection. Connect and try again."
             Kind.TIMEOUT -> "Gemini took too long to answer. Please try again."
             Kind.RATE_LIMIT -> "Too many requests to Gemini right now. Wait a minute and try again."
+            Kind.SERVER -> "Gemini is busy right now (all backup models too). Wait a moment and tap Try again."
             Kind.BAD_KEY -> "Gemini rejected the API key. Check GEMINI_API_KEY in local.properties."
             else -> "Couldn't read this notice. Please try again."
         }

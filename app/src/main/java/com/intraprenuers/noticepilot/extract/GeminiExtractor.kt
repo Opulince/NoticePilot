@@ -19,21 +19,35 @@ import java.util.concurrent.TimeUnit
 
 class GeminiExtractor(
     private val apiKey: String,
-    private val client: OkHttpClient = defaultClient()
+    private val client: OkHttpClient = defaultClient(),
+    private val models: List<String> = GeminiConfig.MODELS
 ) {
 
+    /**
+     * Tries each model in [models] in order and returns the first usable result. Errors that another
+     * model can't fix (no internet, bad/missing key) are thrown straight away.
+     */
     suspend fun extract(lines: List<SourceLine>): List<ExtractedItem> {
         if (apiKey.isBlank()) throw ExtractionException(Kind.MISSING_KEY, "GEMINI_API_KEY is blank")
-        val body = ExtractionPrompt.buildRequestBody(lines).toString()
-            .toRequestBody("application/json".toMediaType())
-        val request = Request.Builder()
-            .url("${GeminiConfig.BASE_URL}${GeminiConfig.MODEL_NAME}:generateContent")
-            .header("x-goog-api-key", apiKey)
-            .post(body)
-            .build()
-        val responseText = withContext(Dispatchers.IO) { call(request) }
-        return ExtractionParser.parse(responseText)
+        val json = ExtractionPrompt.buildRequestBody(lines).toString()
+        var last: ExtractionException? = null
+        for (model in models) {
+            try {
+                val responseText = withContext(Dispatchers.IO) { call(request(model, json)) }
+                return ExtractionParser.parse(responseText)
+            } catch (e: ExtractionException) {
+                if (e.kind !in FALLBACK_KINDS) throw e
+                last = ExtractionException(e.kind, "$model: ${e.detail}", e)
+            }
+        }
+        throw last ?: ExtractionException(Kind.EMPTY, "No models configured")
     }
+
+    private fun request(model: String, json: String): Request = Request.Builder()
+        .url("${GeminiConfig.BASE_URL}$model:generateContent")
+        .header("x-goog-api-key", apiKey)
+        .post(json.toRequestBody("application/json".toMediaType()))
+        .build()
 
     private fun call(request: Request): String {
         try {
@@ -77,6 +91,9 @@ class GeminiExtractor(
     }
 
     companion object {
+        /** Worth retrying on the next model: overload, quota, timeout, model missing, unusable output. */
+        private val FALLBACK_KINDS = setOf(Kind.SERVER, Kind.RATE_LIMIT, Kind.TIMEOUT, Kind.HTTP, Kind.EMPTY, Kind.BAD_JSON, Kind.BLOCKED)
+
         fun defaultClient(): OkHttpClient {
             val s = GeminiConfig.TIMEOUT_SECONDS
             return OkHttpClient.Builder()
