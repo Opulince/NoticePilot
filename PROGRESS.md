@@ -88,6 +88,7 @@
   - 128/128 unit tests pass: verify 68, extract 28, storage 6, QuoteMatch 8, PdfLimits 9, ShareKinds 4, ScreenFrames 5.
   - Type-checked: the Compose screens, theme, components, ViewModel, `OcrEngine`, capture service, tile, share parser and cache helper, against Compose Multiplatform desktop 1.8.2 and the real API 35 android.jar. Only ML Kit signatures, MainActivity (as a class reference) and R are stubbed.
   - `MainActivity` itself and the manifest are checked by reading only.
+  - Visual check: home, results and source (dark and light) rendered off-screen with Compose desktop 1.6 and sample data. Fonts there are DejaVu, not Noto, and the processing screen was not rendered (its spinner animates forever).
   - `MainActivity` is checked by reading only.
 - Unverified: the Android build of these changes, and everything on a real device (share sheet, tile, MediaProjection on Android 13 vs 14+, cloud and password PDFs, the live Gemini fallback).
 
