@@ -1,64 +1,69 @@
 # NoticePilot — Development Handoff
 
 ## 1. Current Status
-- Overall state: Steps 1–8 are all written. The pipeline is complete: scan/pick → OCR → Gemini → verifier → results → source view → fix & confirm → calendar.
-- Current milestone: on-phone testing. On the laptop, `./gradlew assembleDebug testDebugUnitTest` and `installDebug` pass (Galaxy M21, Android 13).
-- Last completed action: 89 JVM unit tests pass (verify/ + extract/). calendar/ compiles against a real API 35 android.jar.
-- Current blocker: none. The cloud dev env can't build Android (`dl.google.com` blocked), so build on the laptop.
+- Overall state: the full pipeline is done (scan/pick → OCR → Gemini → verifier → results → source → fix & confirm → calendar). Three additions since then: Gemini model fallback, saved notices, and an editorial UI redesign.
+- Current milestone: laptop build plus on-phone check of the redesign and saved notices.
+- Last completed action: UI redesign. All screens and the ViewModel type-check against Compose; 110/110 JVM unit tests pass.
+- Current blocker: none. The cloud dev env can't run an Android build (`dl.google.com` blocked), so build on the laptop.
 
 ## 2. Completed Work
-- [x] Gradle skeleton: AGP 8.13.2, Gradle 8.14.3 wrapper, Kotlin 2.2.21, compileSdk/targetSdk 36, minSdk 26. Versions are in `gradle/libs.versions.toml`.
-  - `GEMINI_API_KEY` goes from root `local.properties` into `BuildConfig`. A missing key gives an empty string, so the app still builds and shows "key missing" at extraction time. `local.properties` is gitignored; see `local.properties.example`.
-- [x] scan/: `DocumentScan` (ML Kit scanner: JPEG, gallery import, 5 pages) and `PhotoPicker` (PickVisualMedia, images only).
-- [x] ocr/: `OcrEngine.read(uris)` uses bundled ML Kit Latin. Lines are numbered L1.. continuously across pages, in ML Kit block/line order. Blank lines are dropped.
-- [x] extract/: `GeminiExtractor(apiKey).extract(List<SourceLine>)` does a direct OkHttp POST to `generateContent` on Dispatchers.IO with a 60 s timeout.
-  - Request: `systemInstruction` + `contents` + `generationConfig.responseMimeType/responseSchema` (OpenAPI types in uppercase).
-  - `ExtractionParser` parses defensively: JSON nulls, code fences, thought parts, blocked responses, a top-level array.
-  - Errors are typed as `ExtractionException.Kind`, each with a user message. The API key never appears in errors.
-- [x] verify/: pure Kotlin `Normalizer`, `DateParser`, `Verifier`, following CLAUDE.md rules 1–5.
-  - Fuzzy matching = minimum edit distance against any substring. Reasons are kept and de-duplicated.
-  - `Verifier.verify` never throws.
-- [x] ui/: `MainViewModel` (one `StateFlow<UiState>`), `UiState` (Idle / Working(stage) / Results(sourceItemId) / Error(canRetry)), and the Scan, Results, Source and Error screens plus Theme.
-  - A Gemini failure keeps the OCR lines, so "Try again" re-runs extraction without rescanning.
-- [x] calendar/: `CalendarIntents.insert` uses ACTION_INSERT with no permissions. No time means an all-day event. The description holds the quote and conditions. ActivityNotFound is caught.
-- [x] Fix & confirm: available on non-verified cards. The ViewModel validates title, YYYY-MM-DD date and HH:mm time. A saved item shows "Confirmed by you" next to its unchanged AI status and becomes calendar-eligible.
+- [x] Skeleton: AGP 8.13.2, Gradle 8.14.3, Kotlin 2.2.21, compile/targetSdk 36, minSdk 26. Versions are in `gradle/libs.versions.toml`.
+  - Key: `GEMINI_API_KEY` comes from `local.properties` into BuildConfig. Laptop SDK: `sdk.dir=G:/PROGRAMS/andriod/Sdk`.
+- [x] scan/ (ML Kit Document Scanner + PickVisualMedia), ocr/ (`OcrEngine`, lines L1.. across pages), calendar/ (ACTION_INSERT; all-day if no time).
+- [x] extract/: OkHttp `generateContent` call, `responseMimeType` + `responseSchema`, defensive parser.
+  - **Model fallback**: `GeminiConfig.MODELS` = 3.6-flash → 3.8-flash → 3.5-flash-lite.
+  - Falls back to the next model on 503/5xx, 429, timeout, other HTTP errors (e.g. 404), empty, blocked or bad JSON.
+  - Does NOT fall back on no internet, bad key or missing key; it throws at once.
+  - When every model is busy: "Gemini is busy right now…" with Try again.
+- [x] verify/: pure Kotlin `Normalizer`, `DateParser`, `Verifier` (CLAUDE.md rules 1–5).
+- [x] **Saved notices** (storage/): `NoticeStore` keeps one JSON file, `filesDir/notices.json`, written via temp file + rename, newest 30 kept.
+  - `NoticeJson` handles encode/decode. Bounding boxes aren't saved. Corrupt entries are skipped.
+  - ViewModel `history: StateFlow<List<SavedNotice>>` loads at start and saves after each scan, edit and delete. `UiState.Results.noticeId` links results to their saved notice.
+- [x] **UI redesign** ("editorial precision"):
+  - Look: paper #F7F6F2, ink #202321, forest green #245B49 accent. Serif titles, flat surfaces with hairline borders, 8/10/12dp radii, no gradients.
+  - Home: wordmark, headline, workflow line, Scan notice, Import a photo, then a Recent notices list (title, date, item count, verified/to-check summary, delete with confirm).
+  - Processing: 5 honest steps. "Document captured" is done once we're working, and the Verifying step carries an explanation.
+  - Results: heading, two-number summary, Verified / Needs your attention sections, cards with a date tile, status badge, reasons and actions.
+  - Source: reader-style lines with cited lines washed sage plus a green rule. The exact quote is semi-bold inside them (`QuoteMatch`), with a pull-quote evidence panel.
+  - Error screen restyled; detail is shown in monospace.
+  - Icons: `ui/components/Icons.kt` (Material path data, no dependency).
+  - Logo slot: `ui/components/Brand.kt`. Set `Brand.LOGO_RES = R.drawable.<siva_logo>` and every header shows it.
 
 ## 3. Current Work
-- [ ] On-phone test of the full flow (not done yet). The app has no launcher icon yet, so it shows the default Android icon.
+- [ ] On-phone check: redesign, saved notices surviving an app restart, fallback (needs a real 503 to see it).
 
 ## 4. Next Actions
-1. Laptop build: DONE.
-2. Install on the phone and run the demo script from the README handoff: scan → results → source → calendar → fix & confirm.
-3. Tune the prompt or verifier on 2–3 real school circulars. Do this only if items are flagged wrongly.
+1. Laptop: `git pull`, `./gradlew assembleDebug testDebugUnitTest`, `./gradlew installDebug`.
+2. Phone: scan → results → source → calendar → fix & confirm. Close the app fully, reopen, and check the notice is under Recent.
+3. Add Siva's logo via `Brand.LOGO_RES`. Add a launcher icon from the same asset (none yet; it's the default Android icon).
 
 ## 5. Architecture & Contracts
-- Flow: MainActivity (launchers) → `MainViewModel.process(uris)` → `OcrEngine` → `GeminiExtractor` → `Verifier.verifyAll` → `UiState.Results`.
-- `OcrLine(id, text, box: Rect?, page)`. `SourceLine(id, text)` is what verify/ and extract/ see, so neither uses android types.
-- `ExtractedItem` matches CLAUDE.md. `CheckedItem(item, status, reasons)`. `ResultItem(id, checked, edited?, confirmed)`, where `shown = edited ?: checked.item` and `canAddToCalendar = (VERIFIED || confirmed) && date != null`.
-- Model name lives only in `extract/GeminiConfig.MODEL_NAME`.
+- Flow: MainActivity → `MainViewModel.process(uris)` → `OcrEngine` → `GeminiExtractor` (model chain) → `Verifier.verifyAll` → `UiState.Results` + `SavedNotice` saved.
+- Types: `OcrLine(id, text, box: Rect?, page)`. `SourceLine(id, text)` for verify/extract. `ResultItem(id, checked, edited?, confirmed)`. `SavedNotice(id, savedAt, lines, items)`.
+- Stages: READING_TEXT → EXTRACTING → VERIFYING → PREPARING.
+- `ScanScreen(stage, notice, recent, onScan, onPickPhoto, onOpenNotice, onDeleteNotice)`. Other screen signatures are unchanged.
 
 ## 6. Decisions & Constraints
-- Model `gemini-3.6-flash` (stable, previous-gen Flash). Switched from `gemini-3.8-flash`, which returned 503 "experiencing high demand" on the phone. Other option: `gemini-3.5-flash-lite`.
-- `responseSchema` was kept, not the newer `responseFormat.text.schema` that the docs also show. CLAUDE.md asks for `responseSchema`, and it is still documented for generateContent. If the API rejects it, switch only `ExtractionPrompt.buildRequestBody`.
-- AGP 8.13.2 was chosen over the newest 9.5, because it is supported by any 2025+ Android Studio and needs no AGP 9 built-in-Kotlin changes. AndroidX versions are pinned to that generation (Compose BOM 2025.10.01).
-- No rehearsal Gradle cache existed in the repo, so the first sync downloads everything. Do it before the event.
-- ISO dates are `yyyy-MM-dd`. The master prompt's "dd-MM-yyy" is a typo; CLAUDE.md wins.
-- APPROXIMATE items go under "Needs your attention" and are not calendar-eligible until confirmed.
-- `org.json` is a testImplementation only, because android.jar's version is a stub in local unit tests.
-- This file goes past CLAUDE.md's 30-line limit, because the handoff spec asks for 9 sections.
+- Fallback means several model names (`GeminiConfig.MODELS`), against CLAUDE.md's "one constant". The user asked for it, and the list still lives in one file.
+- Persistence is a JSON file, not a database (CLAUDE.md bans Room/DBs).
+- Secondary text #6B6F6A instead of the brief's #747873, for WCAG AA contrast on paper.
+- No screen-transition animation: Crossfade over UiState would reset scroll and dialog state on every edit.
+- Earlier decisions still stand: AGP 8.13.2 (works on any 2025+ Studio), ISO `yyyy-MM-dd`, APPROXIMATE needs confirming before calendar, org.json is a test-only dependency.
 - Out of scope: Room, Hilt, accounts, Arabic, conflicts, offline AI, alarms, TTS, Firebase, Gemini SDK.
 
 ## 7. Build & Test Status
-- Android build: PASSES on the laptop (assembleDebug, testDebugUnitTest, installDebug). It can't run in the cloud env.
-- Unit tests: 89/89 pass on plain JVM (Kotlin 2.2.21, real org.json + OkHttp): verify 68, extract 21. These are the same files `./gradlew testDebugUnitTest` runs.
-- Unverified: the live Gemini call and all runtime behaviour on the phone.
-- Commands: `./gradlew assembleDebug`, `./gradlew testDebugUnitTest`.
+- Laptop, last run: assembleDebug, testDebugUnitTest and installDebug passed, BEFORE the fallback, persistence and redesign changes. Re-run.
+- Cloud JVM checks (not a real Android build):
+  - 110/110 unit tests pass: verify 68, extract 28, storage 6, QuoteMatch 8.
+  - The Compose screens, theme, components and ViewModel type-check against Compose Multiplatform desktop 1.8.2 (same API as our Jetpack Compose; Android-only bits stubbed).
+  - `MainActivity` is checked by reading only.
+- Unverified: the Android build of these changes, the live Gemini fallback, and how it looks and behaves on the phone.
 
 ## 8. Known Bugs & Risks
-- Verifier doesn't check `time` against the quote (spec has no rule). A wrong time can reach a verified card.
-- DateParser: a year-less `12.10` (a price or decimal) can read as 12 Oct. Month-first ranges like "October 26-28, 2026" are not parsed, so they get flagged.
-- First Document Scanner use downloads a Play-services module and needs internet. Pick photo is the fallback.
+- The verifier doesn't check `time` against the quote. A year-less "12.10" can read as 12 Oct. Month-first ranges are not parsed.
+- Worst case with all three models timing out is about 3 minutes (60 s each) before the error. System back cancels.
+- First Document Scanner use downloads a Play-services module; Import a photo is the fallback.
 
 ## 9. Agent Handoff Instructions
-- Read CLAUDE.md, then this file, then the code. Next action: §4.1. Don't change contracts in §5 or move verify/ off pure Kotlin.
-- To test verify/extract without the Android SDK: a kotlin("jvm") project whose sourceSets point at `app/src/{main,test}/java/.../{verify,extract}`, plus okhttp 4.12.0, org.json, coroutines-core and junit.
+- Read CLAUDE.md, then this file, then the code. Next action: §4.1. Keep verify/ pure Kotlin, and keep the `storage/` JSON format backward compatible (it has a `version` field).
+- JVM check recipe: a kotlin("jvm") project pointing at `app/src/{main,test}` plus okhttp, org.json, coroutines-core and junit. For storage/ui tests, add android.jar minus its stubbed `org/json`.

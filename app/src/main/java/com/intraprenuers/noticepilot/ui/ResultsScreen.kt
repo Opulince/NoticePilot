@@ -6,21 +6,28 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,13 +35,22 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.intraprenuers.noticepilot.ui.components.ConfirmedBadge
+import com.intraprenuers.noticepilot.ui.components.DateTile
+import com.intraprenuers.noticepilot.ui.components.NpIcons
+import com.intraprenuers.noticepilot.ui.components.Overline
 import com.intraprenuers.noticepilot.ui.components.StatusBadge
 import com.intraprenuers.noticepilot.ui.components.TypeChip
 import com.intraprenuers.noticepilot.ui.components.formatWhen
+import com.intraprenuers.noticepilot.ui.components.hairline
 import com.intraprenuers.noticepilot.verify.Status
 
 @Composable
@@ -47,81 +63,158 @@ fun ResultsScreen(
 ) {
     val verified = state.items.filter { it.isVerified }
     val attention = state.items.filter { !it.isVerified }
+    // Same naming rule as the saved-notice list, so a notice has one title everywhere.
+    val heading = state.items.firstOrNull()?.shown?.title ?: state.lines.firstOrNull()?.text ?: "Scanned notice"
 
-    LazyColumn(
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .safeDrawingPadding(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
     ) {
-        item {
-            Column {
-                Text(
-                    text = "Your notice",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                if (state.items.isNotEmpty()) {
+        TopBar(onBack = onScanAnother, onFullText = { onOpenSource(-1) })
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
+                Column {
+                    Overline("Scanned notice")
+                    Spacer(Modifier.height(6.dp))
                     Text(
-                        text = "${verified.size} verified · ${attention.size} need your attention",
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = heading,
+                        style = MaterialTheme.typography.headlineSmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "${state.lines.size} lines read · ${state.items.size} ${if (state.items.size == 1) "item" else "items"} found",
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                }
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = onScanAnother, modifier = Modifier.fillMaxWidth()) {
-                    Text("Scan another notice")
-                }
-            }
-        }
-
-        if (state.items.isEmpty()) {
-            item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "No dates or tasks found in this notice.",
-                        style = MaterialTheme.typography.titleMedium,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    Button(onClick = { onOpenSource(-1) }) {
-                        Text("View scanned text")
+                    if (state.items.isNotEmpty()) {
+                        Spacer(Modifier.height(16.dp))
+                        Summary(verified.size, attention.size)
                     }
                 }
             }
-        }
 
-        if (verified.isNotEmpty()) {
-            item { SectionHeader("Verified") }
-            items(verified, key = { it.id }) { item ->
-                ResultCard(item, onOpenSource, onAddToCalendar, onSaveEdit)
+            if (state.items.isEmpty()) {
+                item { EmptyResults(onViewText = { onOpenSource(-1) }) }
             }
-        }
 
-        if (attention.isNotEmpty()) {
-            item { SectionHeader("Needs your attention") }
-            items(attention, key = { it.id }) { item ->
-                ResultCard(item, onOpenSource, onAddToCalendar, onSaveEdit)
+            if (verified.isNotEmpty()) {
+                item {
+                    SectionHeader(
+                        title = "Verified",
+                        count = verified.size,
+                        icon = NpIcons.CheckCircle,
+                        tint = StatusColors.verified().content,
+                        caption = "Found word for word in the scanned text."
+                    )
+                }
+                items(verified, key = { it.id }) { item ->
+                    ResultCard(item, onOpenSource, onAddToCalendar, onSaveEdit)
+                }
+            }
+
+            if (attention.isNotEmpty()) {
+                item {
+                    SectionHeader(
+                        title = "Needs your attention",
+                        count = attention.size,
+                        icon = NpIcons.Warning,
+                        tint = StatusColors.needsCheck().content,
+                        caption = "Couldn't be fully matched to the text. Check the source, then fix & confirm."
+                    )
+                }
+                items(attention, key = { it.id }) { item ->
+                    ResultCard(item, onOpenSource, onAddToCalendar, onSaveEdit)
+                }
             }
         }
     }
 }
 
 @Composable
-private fun SectionHeader(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(top = 8.dp)
-    )
+private fun TopBar(onBack: () -> Unit, onFullText: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(onClick = onBack) {
+            Icon(NpIcons.Back, contentDescription = "Back to home")
+        }
+        Text("Results", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+        TextButton(onClick = onFullText) { Text("Full text") }
+    }
+}
+
+/** Two quiet numbers on one neutral strip: colour only on the numerals, so it never reads as a traffic light. */
+@Composable
+private fun Summary(verified: Int, attention: Int) {
+    Surface(shape = NpShape.Card, color = MaterialTheme.colorScheme.surface, border = hairline(), modifier = Modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.padding(vertical = 14.dp)) {
+            SummaryCell(verified, "verified", StatusColors.verified().content, Modifier.weight(1f))
+            VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.height(44.dp))
+            SummaryCell(attention, if (attention == 1) "needs attention" else "need attention", StatusColors.needsCheck().content, Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun SummaryCell(count: Int, label: String, numberColor: Color, modifier: Modifier) {
+    Column(modifier = modifier.padding(horizontal = 16.dp)) {
+        Text(
+            text = count.toString(),
+            fontFamily = FontFamily.Serif,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 28.sp,
+            lineHeight = 32.sp,
+            color = if (count == 0) MaterialTheme.colorScheme.onSurfaceVariant else numberColor
+        )
+        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun SectionHeader(title: String, count: Int, icon: ImageVector, tint: Color, caption: String) {
+    Column(modifier = Modifier.padding(top = 14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.width(8.dp))
+            Text("$count", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text(caption, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun EmptyResults(onViewText: () -> Unit) {
+    Surface(shape = NpShape.Card, color = MaterialTheme.colorScheme.surface, border = hairline(), modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(NpIcons.Document, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(32.dp))
+            Text("No dates or tasks found", style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+            Text(
+                "The text was read, but nothing in it looked like an event, deadline or task. You can still read the scanned text.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(4.dp))
+            Button(onClick = onViewText, shape = NpShape.Control) { Text("View scanned text") }
+        }
+    }
 }
 
 @Composable
@@ -136,60 +229,100 @@ private fun ResultCard(
     val whenText = formatWhen(shown.date, shown.endDate, shown.time)
     val status = item.checked.status
 
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onOpenSource(item.id) }
+    Surface(
+        shape = NpShape.Card,
+        color = MaterialTheme.colorScheme.surface,
+        border = hairline(),
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            TypeChip(shown.type)
-            Text(
-                text = shown.title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            if (whenText != null) {
-                Text(text = whenText, style = MaterialTheme.typography.bodyMedium)
+        Column(modifier = Modifier.clickable { onOpenSource(item.id) }.padding(14.dp)) {
+            Row {
+                DateTile(iso = shown.date, highlighted = item.isVerified || item.confirmed)
+                Spacer(Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TypeChip(shown.type)
+                    Text(text = shown.title, style = MaterialTheme.typography.titleMedium)
+                    if (whenText != null) {
+                        Text(
+                            text = whenText,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    for (condition in shown.conditions) {
+                        Text(
+                            text = "•  $condition",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
-            for (condition in shown.conditions) {
-                Text(text = "• $condition", style = MaterialTheme.typography.bodyMedium)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 StatusBadge(status)
                 if (item.confirmed) ConfirmedBadge()
             }
-            if (status != Status.VERIFIED) {
-                for (reason in item.checked.reasons) {
-                    Text(
-                        text = "⚠ $reason",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
             if (item.edited != null) {
+                Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "Edited by you",
+                    "Edited by you — the AI status above is for the original reading.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            if (item.canAddToCalendar) {
-                Button(onClick = { onAddToCalendar(item) }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Add to calendar")
+
+            if (status != Status.VERIFIED && item.checked.reasons.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    for (reason in item.checked.reasons) {
+                        Text(
+                            text = "—  " + reason.replaceFirstChar { it.uppercase() },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { onOpenSource(item.id) }) { Text("Source") }
                 if (status != Status.VERIFIED) {
-                    TextButton(onClick = { editing = true }) { Text("Fix & confirm") }
+                    TextButton(onClick = { editing = true }) {
+                        Icon(NpIcons.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (item.confirmed) "Edit" else "Fix & confirm")
+                    }
                 }
-                TextButton(onClick = { onOpenSource(item.id) }) { Text("View source") }
+                Spacer(Modifier.weight(1f))
+                if (item.canAddToCalendar && item.isVerified) CalendarButton { onAddToCalendar(item) }
+            }
+            // A confirmed (not verified) item already has two text actions: put the calendar action on its own line.
+            if (item.canAddToCalendar && !item.isVerified) {
+                CalendarButton(Modifier.fillMaxWidth()) { onAddToCalendar(item) }
             }
         }
     }
 
     if (editing) {
         EditDialog(item, onSaveEdit) { editing = false }
+    }
+}
+
+@Composable
+private fun CalendarButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        shape = NpShape.Control,
+        contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+        modifier = modifier
+    ) {
+        Icon(NpIcons.Event, contentDescription = null, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(8.dp))
+        Text("Add to calendar")
     }
 }
 
@@ -210,10 +343,16 @@ private fun EditDialog(
         title = { Text("Fix & confirm") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Check the source, correct anything wrong, then save. The item will be marked as confirmed by you.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
                     label = { Text("Title") },
+                    shape = NpShape.Control,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
@@ -222,6 +361,7 @@ private fun EditDialog(
                     label = { Text("Date") },
                     placeholder = { Text("YYYY-MM-DD") },
                     singleLine = true,
+                    shape = NpShape.Control,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
@@ -230,6 +370,7 @@ private fun EditDialog(
                     label = { Text("Time") },
                     placeholder = { Text("HH:mm, optional") },
                     singleLine = true,
+                    shape = NpShape.Control,
                     modifier = Modifier.fillMaxWidth()
                 )
                 val currentError = error
@@ -255,6 +396,8 @@ private fun EditDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }
-        }
+        },
+        containerColor = MaterialTheme.colorScheme.surface,
+        shape = NpShape.Card
     )
 }

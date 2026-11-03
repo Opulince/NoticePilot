@@ -48,15 +48,18 @@ class MainActivity : ComponentActivity() {
             NoticePilotTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     val state by viewModel.state.collectAsStateWithLifecycle()
+                    val history by viewModel.history.collectAsStateWithLifecycle()
                     BackHandler(enabled = state !is UiState.Idle) { viewModel.back() }
                     when (val s = state) {
                         is UiState.Idle -> ScanScreen(
-                            stage = null, notice = s.notice,
-                            onScan = ::startScan, onPickPhoto = ::pickPhoto
+                            stage = null, notice = s.notice, recent = history,
+                            onScan = ::startScan, onPickPhoto = ::pickPhoto,
+                            onOpenNotice = viewModel::openNotice, onDeleteNotice = viewModel::deleteNotice
                         )
                         is UiState.Working -> ScanScreen(
-                            stage = s.stage, notice = null,
-                            onScan = {}, onPickPhoto = {}
+                            stage = s.stage, notice = null, recent = emptyList(),
+                            onScan = {}, onPickPhoto = {},
+                            onOpenNotice = {}, onDeleteNotice = {}
                         )
                         is UiState.Results -> {
                             val sourceId = s.sourceItemId

@@ -8,8 +8,9 @@ import com.intraprenuers.noticepilot.verify.Status
 /** Pipeline stages shown while working. Only the stage that is actually running is shown. */
 enum class Stage(val label: String) {
     READING_TEXT("Reading text..."),
-    EXTRACTING("Extracting important information..."),
-    VERIFYING("Verifying details...")
+    EXTRACTING("Extracting information..."),
+    VERIFYING("Verifying evidence..."),
+    PREPARING("Preparing results...")
 }
 
 /**
@@ -43,7 +44,9 @@ sealed interface UiState {
     data class Results(
         val lines: List<OcrLine>,
         val items: List<ResultItem>,
-        val sourceItemId: Int? = null
+        val sourceItemId: Int? = null,
+        /** Id of the saved notice these results belong to, so edits are saved too. */
+        val noticeId: Long? = null
     ) : UiState
 
     /**

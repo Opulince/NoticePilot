@@ -9,6 +9,8 @@ import com.intraprenuers.noticepilot.extract.ExtractionException
 import com.intraprenuers.noticepilot.extract.GeminiExtractor
 import com.intraprenuers.noticepilot.ocr.OcrEngine
 import com.intraprenuers.noticepilot.ocr.OcrLine
+import com.intraprenuers.noticepilot.storage.NoticeStore
+import com.intraprenuers.noticepilot.storage.SavedNotice
 import com.intraprenuers.noticepilot.verify.SourceLine
 import com.intraprenuers.noticepilot.verify.Verifier
 import kotlinx.coroutines.CancellationException
@@ -20,6 +22,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
 import java.util.Locale
@@ -31,11 +34,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     private val ocr = OcrEngine(app)
+    private val store = NoticeStore(File(app.filesDir, "notices.json"))
+
+    /** Previously scanned notices, newest first. Saved to disk so they survive closing the app. */
+    private val _history = MutableStateFlow<List<SavedNotice>>(emptyList())
+    val history: StateFlow<List<SavedNotice>> = _history.asStateFlow()
     private val extractor = GeminiExtractor(BuildConfig.GEMINI_API_KEY)
 
     /** OCR lines of the last scan, kept so a failed Gemini call can be retried without rescanning. */
     private var lastLines: List<OcrLine> = emptyList()
     private var job: Job? = null
+
+    init {
+        viewModelScope.launch {
+            val loaded = store.load()
+            // Merge, in case a scan finished before loading did.
+            _history.update { current -> (current + loaded).distinctBy { it.id }.sortedByDescending { it.savedAt } }
+        }
+    }
 
     fun process(uris: List<Uri>) {
         if (uris.isEmpty()) {
@@ -99,7 +115,29 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         _state.value = UiState.Working(Stage.VERIFYING)
         val checked = withContext(Dispatchers.Default) { Verifier.verifyAll(items, source) }
-        _state.value = UiState.Results(lines, checked.mapIndexed { i, c -> ResultItem(id = i, checked = c) })
+        _state.value = UiState.Working(Stage.PREPARING)
+        val resultItems = checked.mapIndexed { i, c -> ResultItem(id = i, checked = c) }
+        val now = System.currentTimeMillis()
+        val notice = SavedNotice(id = now, savedAt = now, lines = lines, items = resultItems)
+        _history.update { (listOf(notice) + it).take(NoticeStore.MAX_NOTICES) }
+        persist()
+        _state.value = UiState.Results(lines, resultItems, noticeId = notice.id)
+    }
+
+    /** Opens a previously scanned notice. */
+    fun openNotice(id: Long) {
+        val notice = _history.value.firstOrNull { it.id == id } ?: return
+        job?.cancel()
+        _state.value = UiState.Results(notice.lines, notice.items, noticeId = notice.id)
+    }
+
+    fun deleteNotice(id: Long) {
+        _history.update { list -> list.filterNot { it.id == id } }
+        persist()
+    }
+
+    private fun persist() {
+        viewModelScope.launch { store.save { _history.value } }
     }
 
     /** [itemId] = -1 opens the scanned text with nothing highlighted. */
@@ -134,6 +172,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     confirmed = true
                 )
             })
+        }
+        // Keep the saved copy in step with the correction.
+        val results = _state.value as? UiState.Results
+        val noticeId = results?.noticeId
+        if (results != null && noticeId != null) {
+            _history.update { list -> list.map { if (it.id == noticeId) it.copy(items = results.items) else it } }
+            persist()
         }
         return null
     }
