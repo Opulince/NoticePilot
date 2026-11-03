@@ -2,9 +2,9 @@
 
 ## 1. Current Status
 - Overall state: Steps 1–8 are all written. The pipeline is complete: scan/pick → OCR → Gemini → verifier → results → source view → fix & confirm → calendar.
-- Current milestone: first Android build plus on-phone test. NOT yet compiled as an Android app.
+- Current milestone: on-phone testing. On the laptop, `./gradlew assembleDebug testDebugUnitTest` and `installDebug` pass (Galaxy M21, Android 13).
 - Last completed action: 89 JVM unit tests pass (verify/ + extract/). calendar/ compiles against a real API 35 android.jar.
-- Current blocker: the cloud dev environment blocks `dl.google.com` (Google Maven + SDK), so `./gradlew assembleDebug` can only run on the laptop.
+- Current blocker: none. The cloud dev env can't build Android (`dl.google.com` blocked), so build on the laptop.
 
 ## 2. Completed Work
 - [x] Gradle skeleton: AGP 8.13.2, Gradle 8.14.3 wrapper, Kotlin 2.2.21, compileSdk/targetSdk 36, minSdk 26. Versions are in `gradle/libs.versions.toml`.
@@ -24,10 +24,10 @@
 - [x] Fix & confirm: available on non-verified cards. The ViewModel validates title, YYYY-MM-DD date and HH:mm time. A saved item shows "Confirmed by you" next to its unchanged AI status and becomes calendar-eligible.
 
 ## 3. Current Work
-- [ ] First real build on the laptop. Files likely to need small fixes (never compiled): `MainActivity.kt`, `ui/*.kt`, `scan/*.kt`, `ocr/OcrEngine.kt`.
+- [ ] On-phone test of the full flow (not done yet). The app has no launcher icon yet, so it shows the default Android icon.
 
 ## 4. Next Actions
-1. Laptop: run `./gradlew assembleDebug testDebugUnitTest` and fix any compile errors (most likely Compose imports).
+1. Laptop build: DONE.
 2. Install on the phone and run the demo script from the README handoff: scan → results → source → calendar → fix & confirm.
 3. Tune the prompt or verifier on 2–3 real school circulars. Do this only if items are flagged wrongly.
 
@@ -49,9 +49,9 @@
 - Out of scope: Room, Hilt, accounts, Arabic, conflicts, offline AI, alarms, TTS, Firebase, Gemini SDK.
 
 ## 7. Build & Test Status
-- Android build: NOT RUN (no SDK or Google Maven in the cloud env).
+- Android build: PASSES on the laptop (assembleDebug, testDebugUnitTest, installDebug). It can't run in the cloud env.
 - Unit tests: 89/89 pass on plain JVM (Kotlin 2.2.21, real org.json + OkHttp): verify 68, extract 21. These are the same files `./gradlew testDebugUnitTest` runs.
-- Unverified: all Compose/ML Kit/Activity code, the live Gemini call, and everything on the phone.
+- Unverified: the live Gemini call and all runtime behaviour on the phone.
 - Commands: `./gradlew assembleDebug`, `./gradlew testDebugUnitTest`.
 
 ## 8. Known Bugs & Risks
