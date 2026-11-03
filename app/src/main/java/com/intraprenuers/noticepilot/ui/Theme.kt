@@ -63,35 +63,37 @@ private val LightColors = lightColorScheme(
     surfaceContainerHighest = Color(0xFFE8E7E2)
 )
 
+// Dark: near-black with a forest-green undertone. Accent green unchanged. Ambient light and grain are
+// drawn by ui/components/Backdrop.kt, not baked into these colours.
 private val DarkColors = darkColorScheme(
     primary = Color(0xFF8FC3AE),
     onPrimary = Color(0xFF0D2A20),
-    primaryContainer = Color(0xFF1F3A2F),
+    primaryContainer = Color(0xFF1B2A20),
     onPrimaryContainer = Color(0xFFCFE3D6),
     secondary = Color(0xFFB4C7B8),
     onSecondary = Color(0xFF1E2B22),
-    secondaryContainer = Color(0xFF26342B),
+    secondaryContainer = Color(0xFF1B2A20),
     onSecondaryContainer = Color(0xFFDCE8DF),
     tertiary = Palette.Sage,
     onTertiary = Palette.Ink,
-    background = Color(0xFF141615),
-    onBackground = Color(0xFFE9E8E3),
-    surface = Color(0xFF1C1F1D),
-    onSurface = Color(0xFFE9E8E3),
-    surfaceVariant = Color(0xFF262927),
-    onSurfaceVariant = Color(0xFFA3A7A1),
-    outline = Color(0xFF4A4F4B),
-    outlineVariant = Color(0xFF2E322F),
+    background = Color(0xFF090D0B),
+    onBackground = Color(0xFFE7EAE6),
+    surface = Color(0xFF111813),
+    onSurface = Color(0xFFE7EAE6),
+    surfaceVariant = Color(0xFF18211B),
+    onSurfaceVariant = Color(0xFFA2ABA4),
+    outline = Color(0xFF5E6F62), // 3.4:1 on surface: meets WCAG non-text contrast for button borders
+    outlineVariant = Color(0xFF1F2A23),
     error = Color(0xFFF0A899),
     onError = Color(0xFF4A150C),
     errorContainer = Color(0xFF42231E),
     onErrorContainer = Color(0xFFF6D5CE),
     surfaceTint = Color(0xFF8FC3AE),
-    surfaceContainerLowest = Color(0xFF111312),
-    surfaceContainerLow = Color(0xFF191B1A),
-    surfaceContainer = Color(0xFF1F2220),
-    surfaceContainerHigh = Color(0xFF222523),
-    surfaceContainerHighest = Color(0xFF2F3230)
+    surfaceContainerLowest = Color(0xFF070A08),
+    surfaceContainerLow = Color(0xFF0E1411),
+    surfaceContainer = Color(0xFF151E18),
+    surfaceContainerHigh = Color(0xFF111813),
+    surfaceContainerHighest = Color(0xFF1F2B23)
 )
 
 /** Corner radii: small controls 8, buttons 10, cards/panels 12. Nothing is a pill. */
@@ -158,6 +160,6 @@ object StatusColors {
     /** "Confirmed by you": neutral ink, so it never reads as an automatic verification. */
     @Composable
     fun confirmed(): StatusColor =
-        if (isSystemInDarkTheme()) StatusColor(Color(0xFF2A2D2B), Color(0xFFE9E8E3))
+        if (isSystemInDarkTheme()) StatusColor(Color(0xFF1C241F), Color(0xFFE7EAE6))
         else StatusColor(Color(0xFFECEBE6), Color(0xFF202321))
 }

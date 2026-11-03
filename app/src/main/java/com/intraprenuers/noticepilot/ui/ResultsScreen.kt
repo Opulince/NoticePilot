@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -204,7 +205,9 @@ private fun SummaryCell(count: Int, label: String, numberColor: Color, modifier:
 
 @Composable
 private fun SectionHeader(title: String, count: Int, icon: ImageVector, tint: Color, caption: String) {
-    Column(modifier = Modifier.padding(top = 14.dp)) {
+    Column(modifier = Modifier.padding(top = 8.dp)) {
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Spacer(Modifier.height(16.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))

@@ -3,7 +3,7 @@
 ## 1. Current Status
 - Overall state: the full pipeline is done. Entry points: scan, import image, import PDF, **share sheet (image/images/PDF)** and the **Quick Settings "Scan Notice" tile**, all → OCR → Gemini → verifier → results → source → fix & confirm → calendar. It also has the model fallback, saved notices, the editorial UI and the logo.
 - Current milestone: laptop build plus on-phone check of the share target and QS tile (new), and of PDF import, the redesign and saved notices.
-- Last completed action: share target and QS screen capture. All new code type-checks against android.jar; 128/128 JVM unit tests pass.
+- Last completed action: dark-theme polish (green-black palette, ambient light + grain backdrop, separators, contrast fixes). It type-checks; 128/128 JVM unit tests pass.
 - Current blocker: none. The cloud dev env can't run an Android build (`dl.google.com` blocked), so build on the laptop.
 
 ## 2. Completed Work
@@ -49,6 +49,11 @@
   - Source: reader-style lines with cited lines washed sage plus a green rule. The exact quote is semi-bold inside them (`QuoteMatch`), with a pull-quote evidence panel.
   - Error screen restyled; detail is shown in monospace.
   - Icons: `ui/components/Icons.kt` (Material path data, no dependency).
+  - **Dark-theme polish**:
+    - Palette: background #090D0B, surface #111813, subtle green surface #1B2A20 (primaryContainer); accent #8FC3AE unchanged.
+    - Contrast: outline #5E6F62 (3.4:1, WCAG non-text). Measured: body text 16:1, secondary 7.6–8.3:1, status badges ≥7.2:1.
+    - `ui/components/Backdrop.kt`, drawn once in MainActivity under every screen, on its own graphics layer: one diffuse forest-green radial light at the top-left/header (≤20% alpha, wide falloff) plus a static 128 px grain tile at 4% (effective ≤2.4%). Dark theme only; light stays flat paper.
+    - Hierarchy: hairline separator between home actions and Recent notices, and above each results section. Source line numbers use onSurfaceVariant (were ~2:1). Source side margins 20dp like the other screens.
 - [x] **Siva's logo**. The original `WhatsApp Image 2026-11-03 at 7.07.08 AM.jpeg` (1024×1024, square, green rounded tile on white corners) is kept unmodified in the repo root:
   - In-app: `res/drawable-nodpi/noticepilot_logo.png`, the same artwork with only its white JPEG corners made transparent, 192 px. Shown square, 40dp on home and 30dp on processing/error, via `BrandMark`/`Brand.LOGO_RES`. Not on results or source.
   - Launcher: an adaptive icon (`mipmap-anydpi-v26/ic_launcher*.xml` + `drawable-nodpi/ic_launcher_foreground.png`). The artwork is scaled into the 66dp safe zone and the gradient extended to the edges. Checked under circle and squircle masks.

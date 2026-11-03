@@ -120,7 +120,9 @@ fun ScanScreen(
                 Spacer(Modifier.height(16.dp))
                 NoticeBanner(notice)
             }
-            Spacer(Modifier.height(36.dp))
+            Spacer(Modifier.height(32.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Spacer(Modifier.height(20.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Overline("Recent notices")
                 if (recent.isNotEmpty()) {

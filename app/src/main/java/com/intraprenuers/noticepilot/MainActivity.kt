@@ -16,6 +16,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -38,6 +39,7 @@ import com.intraprenuers.noticepilot.ui.ResultsScreen
 import com.intraprenuers.noticepilot.ui.ScanScreen
 import com.intraprenuers.noticepilot.ui.SourceScreen
 import com.intraprenuers.noticepilot.ui.UiState
+import com.intraprenuers.noticepilot.ui.components.Backdrop
 
 class MainActivity : ComponentActivity() {
 
@@ -86,7 +88,13 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             NoticePilotTheme {
-                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background,
+                    contentColor = MaterialTheme.colorScheme.onBackground
+                ) {
+                  Box(modifier = Modifier.fillMaxSize()) {
+                    Backdrop(Modifier.fillMaxSize()) // dark theme only: ambient green light + faint grain
                     val state by viewModel.state.collectAsStateWithLifecycle()
                     val history by viewModel.history.collectAsStateWithLifecycle()
                     BackHandler(enabled = state !is UiState.Idle) { viewModel.back() }
@@ -125,6 +133,7 @@ class MainActivity : ComponentActivity() {
                             onRetry = viewModel::retry, onBack = viewModel::reset
                         )
                     }
+                  }
                 }
             }
         }

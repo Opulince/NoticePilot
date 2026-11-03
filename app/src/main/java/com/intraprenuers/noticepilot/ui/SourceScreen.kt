@@ -137,7 +137,7 @@ fun SourceScreen(lines: List<OcrLine>, item: ResultItem?, onBack: () -> Unit) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp)
+                    .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 12.dp)
             ) {
                 LazyColumn(
                     state = listState,
@@ -200,7 +200,7 @@ private fun LineRow(line: OcrLine, cited: Boolean, quote: String) {
             fontWeight = FontWeight.Normal,
             letterSpacing = 0.sp,
             textAlign = TextAlign.End,
-            color = if (cited) accent else MaterialTheme.colorScheme.outline,
+            color = if (cited) accent else MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier
                 .width(26.dp)
                 .padding(top = 4.dp)
@@ -233,7 +233,7 @@ private fun EvidencePanel(item: ResultItem, citedPages: List<Int>) {
         border = hairline(),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .padding(horizontal = 20.dp, vertical = 4.dp)
     ) {
         // Capped height so long quotes never push the source text off screen.
         Column(
