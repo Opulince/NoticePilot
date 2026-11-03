@@ -40,6 +40,17 @@ object PdfLimits {
     /** Shown on the results when pages were skipped, null otherwise. */
     fun skippedNote(pageCount: Int): String? =
         if (pageCount > MAX_PAGES) "Only the first $MAX_PAGES of $pageCount pages were read. Split long PDFs to read the rest." else null
+
+    /** Everything the user should know about pages that were not read (over the limit, or failed). Null if none. */
+    fun readNote(pageCount: Int, failedPages: List<Int>): String? {
+        val parts = mutableListOf<String>()
+        skippedNote(pageCount)?.let { parts += it }
+        if (failedPages.isNotEmpty()) {
+            val which = failedPages.joinToString(", ")
+            parts += if (failedPages.size == 1) "Page $which couldn't be rendered and was not read." else "Pages $which couldn't be rendered and were not read."
+        }
+        return if (parts.isEmpty()) null else parts.joinToString(" ")
+    }
 }
 
 /** A PDF problem with a message that can be shown to the user as is. */

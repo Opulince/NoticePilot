@@ -1,9 +1,9 @@
 # NoticePilot — Development Handoff
 
 ## 1. Current Status
-- Overall state: the full pipeline is done (scan / import image / import PDF → OCR → Gemini → verifier → results → source → fix & confirm → calendar). It also has the Gemini model fallback, saved notices, the editorial UI and Siva's logo.
-- Current milestone: laptop build plus on-phone check of PDF import, the redesign, saved notices and the logo.
-- Last completed action: PDF import. OCR, the ViewModel and all screens type-check; 118/118 JVM unit tests pass.
+- Overall state: the full pipeline is done. Entry points: scan, import image, import PDF, **share sheet (image/images/PDF)** and the **Quick Settings "Scan Notice" tile**, all → OCR → Gemini → verifier → results → source → fix & confirm → calendar. It also has the model fallback, saved notices, the editorial UI and the logo.
+- Current milestone: laptop build plus on-phone check of the share target and QS tile (new), and of PDF import, the redesign and saved notices.
+- Last completed action: share target and QS screen capture. All new code type-checks against android.jar; 128/128 JVM unit tests pass.
 - Current blocker: none. The cloud dev env can't run an Android build (`dl.google.com` blocked), so build on the laptop.
 
 ## 2. Completed Work
@@ -20,6 +20,18 @@
   - Lines use the same continuous `L1..` ids plus `page` (not `P1-L1`): unique across the document and compatible with prompt, verifier, parser and saved notices.
   - Progress: `Working(stage, detail, fromPdf)`. Steps: Opening PDF → Reading text ("Reading page X of Y") → Extracting → Verifying → Preparing. Retry keeps the PDF context.
   - UI: home has Scan notice plus Import image | Import PDF side by side. Results heading shows the page count; the Source evidence panel shows the cited page(s).
+  - A page that fails to render is skipped and reported in the results note (`PdfLimits.readNote`). The read only fails if no page renders. Cache copies use unique names (`io/CacheFiles`).
+- [x] **Share target**: MainActivity is `singleTop` with SEND (image/*, application/pdf) and SEND_MULTIPLE (image/*) filters.
+  - `share/ShareIntents.parse` reads EXTRA_STREAM, falling back to ClipData. `share/ShareKinds` classifies by MIME, then by extension.
+  - Routing: a PDF → existing `processPdf`. Images → `onSharedFilesReceived`, which copies to unique cache files on IO first (≤10 images, ≤30 MB each), OCRs them, then deletes them.
+  - Each intent is handled once: only when `savedInstanceState == null` or on `onNewIntent`, then `intent.action = null`.
+  - Deviation: shared PDFs are NOT exported to per-page JPEGs; they reuse the existing page-by-page PdfRenderer→OCR path (no duplicate pipeline, one bitmap at a time).
+- [x] **QS tile + screen capture**:
+  - `tile/NoticeTileService`: label "Scan Notice", subtitle on API 29+, `startActivityAndCollapse` with a PendingIntent on API 34+, unlockAndRun when locked. Icon: `res/drawable/ic_qs_scan.xml`.
+  - Flow in MainActivity: ACTION_TILE_CAPTURE → (first time, API 33+: ask POST_NOTIFICATIONS) → `createScreenCaptureIntent()` consent → `ScreenCaptureService.start` (FGS type mediaProjection, started while we're in the foreground) → `moveTaskToBack(true)`.
+  - `capture/ScreenCaptureService`: getMediaProjection, registers its Callback before `createVirtualDisplay(ImageReader)`, keeps the newest real frame, takes it after `SETTLE_MS` 1.5 s (6 s timeout), saves a JPEG to `cacheDir/imports`, then releases everything once (display, reader, projection, thread, foreground) and calls stopSelf.
+  - Handoff: `capture/CaptureHandoff` → MainActivity.onResume → `viewModel.onScreenCaptured(file)` (OCR, then delete). The service also tries `startActivity` and posts a "tap to read" notification.
+  - Cancel, revoke, timeout and service death all end as `onCaptureFailed(message)` → a home notice. Repeated taps during a capture are ignored (`inProgress`).
 - [x] extract/: OkHttp `generateContent` call, `responseMimeType` + `responseSchema`, defensive parser.
   - **Model fallback**: `GeminiConfig.MODELS` = 3.6-flash → 3.8-flash → 3.5-flash-lite.
   - Falls back to the next model on 503/5xx, 429, timeout, other HTTP errors (e.g. 404), empty, blocked or bad JSON.
@@ -47,10 +59,12 @@
 ## 4. Next Actions
 1. Laptop: `git pull`, `./gradlew assembleDebug testDebugUnitTest`, `./gradlew installDebug`.
 2. Phone: scan → results → source → calendar → fix & confirm. Import a PDF and check page progress and cited page numbers. Close the app fully, reopen, and check notices are under Recent.
-3. Check the launcher icon and the header logo on the phone.
+3. Share tests: 1 image, several images, a multi-page PDF from WhatsApp/Gmail/Files, sharing while the app is open, and an unsupported file. Tile tests: add the tile (edit QS panel) → allow → capture → results; cancel consent; tap the tile twice quickly.
+4. Check the launcher icon and the header logo on the phone.
 
 ## 5. Architecture & Contracts
-- Flow: MainActivity → `MainViewModel.process(uris)` or `processPdf(uri)` → `OcrEngine.read` / `readPdf` → `GeminiExtractor` (model chain) → `Verifier.verifyAll` → `UiState.Results(note)` + `SavedNotice` saved.
+- Flow: MainActivity → `MainViewModel.process(uris)` | `processPdf(uri)` | `onSharedFileReceived` / `onSharedFilesReceived` | `onScreenCaptured(file)` → `OcrEngine.read` / `readPdf` → `GeminiExtractor` (model chain) → `Verifier.verifyAll` → `UiState.Results(note)` + `SavedNotice` saved.
+- Line ids stay `L1..` continuous across pages and images, plus `OcrLine.page` (brief suggested `P1-L1`). This keeps prompt, verifier, parser and saved notices compatible, and page mapping is preserved.
 - Types: `OcrLine(id, text, box: Rect?, page)`. `SourceLine(id, text)` for verify/extract. `ResultItem(id, checked, edited?, confirmed)`. `SavedNotice(id, savedAt, lines, items)`.
 - Stages: (OPENING_PDF) → READING_TEXT → EXTRACTING → VERIFYING → PREPARING. `UiState.Working(stage, detail?, fromPdf)`.
 - `ScanScreen(stage, notice, recent, onScan, onPickPhoto, onImportPdf, onOpenNotice, onDeleteNotice, progressDetail, fromPdf)`. Other screen signatures are unchanged.
@@ -66,15 +80,21 @@
 ## 7. Build & Test Status
 - Laptop, last run: assembleDebug, testDebugUnitTest and installDebug passed, BEFORE the fallback, persistence and redesign changes. Re-run.
 - Cloud JVM checks (not a real Android build):
-  - 118/118 unit tests pass: verify 68, extract 28, storage 6, QuoteMatch 8, PdfLimits 8.
-  - The Compose screens, theme, components, ViewModel and `OcrEngine` type-check against Compose Multiplatform desktop 1.8.2 (same API as our Jetpack Compose) and the real android.jar (PdfRenderer, ParcelFileDescriptor, Bitmap). Only the ML Kit signatures are stubbed.
+  - 128/128 unit tests pass: verify 68, extract 28, storage 6, QuoteMatch 8, PdfLimits 9, ShareKinds 4, ScreenFrames 5.
+  - Type-checked: the Compose screens, theme, components, ViewModel, `OcrEngine`, capture service, tile, share parser and cache helper, against Compose Multiplatform desktop 1.8.2 and the real API 35 android.jar. Only ML Kit signatures, MainActivity (as a class reference) and R are stubbed.
+  - `MainActivity` itself and the manifest are checked by reading only.
   - `MainActivity` is checked by reading only.
-- Unverified: the Android build of these changes, PDF behaviour on a real device (cloud PDFs, password PDFs), the live Gemini fallback, and how it looks and behaves on the phone.
+- Unverified: the Android build of these changes, and everything on a real device (share sheet, tile, MediaProjection on Android 13 vs 14+, cloud and password PDFs, the live Gemini fallback).
 
 ## 8. Known Bugs & Risks
 - The verifier doesn't check `time` against the quote. A year-less "12.10" can read as 12 Oct. Month-first ranges are not parsed.
 - Worst case with all three models timing out is about 3 minutes (60 s each) before the error. System back cancels.
 - First Document Scanner use downloads a Play-services module; Import image and Import PDF are the fallbacks.
+- Screen capture:
+  - Android may block the service from bringing NoticePilot back (background-activity-launch rules). Then the user taps the notification or reopens the app, and the frame is read in onResume.
+  - Every tile use needs fresh consent (Android 14+ allows no token reuse).
+  - The capture includes the status bar. It captures whatever is on screen after 1.5 s; if NoticePilot itself was the foreground app, that's the home screen.
+- Share: SEND_MULTIPLE accepts images only (a PDF must be shared alone).
 - PDFs: only the first 10 pages are read; files over 50 MB are refused. Very small print may OCR poorly at 2400 px (raise `TARGET_LONG_SIDE_PX` if needed; memory grows with its square).
 
 ## 9. Agent Handoff Instructions

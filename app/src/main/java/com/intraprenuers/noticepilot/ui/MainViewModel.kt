@@ -8,7 +8,9 @@ import com.intraprenuers.noticepilot.BuildConfig
 import com.intraprenuers.noticepilot.extract.ExtractionException
 import com.intraprenuers.noticepilot.extract.GeminiExtractor
 import com.intraprenuers.noticepilot.ocr.OcrEngine
+import com.intraprenuers.noticepilot.io.CacheFiles
 import com.intraprenuers.noticepilot.ocr.OcrLine
+import com.intraprenuers.noticepilot.share.ShareKinds
 import com.intraprenuers.noticepilot.ocr.PdfException
 import com.intraprenuers.noticepilot.ocr.PdfLimits
 import com.intraprenuers.noticepilot.storage.NoticeStore
@@ -57,34 +59,99 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun process(uris: List<Uri>) {
-        if (uris.isEmpty()) {
-            _state.value = UiState.Idle("No pages were scanned.")
-            return
-        }
+    fun process(uris: List<Uri>) = launchImages(note = null) { uris }
+
+    /**
+     * Images -> OCR -> pipeline. [prepare] runs first inside the job (e.g. copying shared files to cache)
+     * and returns the image URIs; files in [cleanup] are deleted once OCR is done with them.
+     */
+    private fun launchImages(note: String?, cleanup: MutableList<File> = mutableListOf(), prepare: suspend () -> List<Uri>) {
         job?.cancel()
         job = viewModelScope.launch {
-            _state.value = UiState.Working(Stage.READING_TEXT)
-            val lines = try {
-                ocr.read(uris).lines
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                _state.value = UiState.Error(
-                    message = "Couldn't read that image. Try another photo.",
-                    detail = "${e.javaClass.simpleName}: ${e.message}"
-                )
-                return@launch
+            try {
+                _state.value = UiState.Working(Stage.READING_TEXT)
+                val uris = try {
+                    prepare()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    _state.value = UiState.Error(message = SHARED_FILE_ERROR, detail = "${e.javaClass.simpleName}: ${e.message}")
+                    return@launch
+                }
+                if (uris.isEmpty()) {
+                    _state.value = UiState.Idle("No pages were scanned.")
+                    return@launch
+                }
+                val lines = try {
+                    ocr.read(uris).lines
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    _state.value = UiState.Error(
+                        message = "Couldn't read that image. Try another photo.",
+                        detail = "${e.javaClass.simpleName}: ${e.message}"
+                    )
+                    return@launch
+                } finally {
+                    CacheFiles.deleteQuietly(cleanup) // OCR is finished with them (or failed): safe to delete
+                }
+                if (lines.isEmpty()) {
+                    _state.value = UiState.Idle("No text found. Try a clearer, well-lit photo of the notice.")
+                    return@launch
+                }
+                lastLines = lines
+                lastNote = note
+                lastFromPdf = false
+                extractAndVerify(lines, note = note)
+            } finally {
+                CacheFiles.deleteQuietly(cleanup) // also covers cancellation before OCR ran
             }
-            if (lines.isEmpty()) {
-                _state.value = UiState.Idle("No text found. Try a clearer, well-lit photo of the notice.")
-                return@launch
-            }
-            lastLines = lines
-            lastNote = null
-            lastFromPdf = false
-            extractAndVerify(lines)
         }
+    }
+
+    /** A file shared into NoticePilot (share sheet): PDFs go through [processPdf], images through OCR. */
+    fun onSharedFileReceived(uri: Uri, mimeHint: String?) {
+        val app = getApplication<Application>()
+        val mime = try { app.contentResolver.getType(uri) } catch (e: Exception) { null } ?: mimeHint
+        when (ShareKinds.kindOf(mime, uri.lastPathSegment)) {
+            ShareKinds.Kind.PDF -> processPdf(uri)
+            ShareKinds.Kind.IMAGE -> onSharedFilesReceived(listOf(uri))
+            ShareKinds.Kind.UNSUPPORTED -> _state.value = UiState.Idle("NoticePilot can read images and PDFs. That file type isn't supported.")
+        }
+    }
+
+    /** One or more shared images: copied to cache straight away (while the read permission lasts), then OCR'd in order. */
+    fun onSharedFilesReceived(uris: List<Uri>) {
+        if (uris.isEmpty()) {
+            _state.value = UiState.Idle("Nothing was shared.")
+            return
+        }
+        val app = getApplication<Application>()
+        val cleanup = mutableListOf<File>()
+        launchImages(note = ShareKinds.tooManyImagesNote(uris.size), cleanup = cleanup) {
+            withContext(Dispatchers.IO) {
+                uris.take(ShareKinds.MAX_IMAGES).map { uri ->
+                    val file = CacheFiles.copy(app, uri, prefix = "shared", extension = "img", maxBytes = ShareKinds.MAX_IMAGE_BYTES)
+                    cleanup += file
+                    Uri.fromFile(file)
+                }
+            }
+        }
+    }
+
+    /** Consent given: NoticePilot steps aside while the frame is taken. Shown if the user comes back early. */
+    fun onCaptureStarted() {
+        _state.value = UiState.Idle("Capturing your screen… NoticePilot stepped aside so the notice is visible. It reads it as soon as the capture is saved.")
+    }
+
+    /** Screen capture was cancelled or failed before a frame was saved: back to home with the reason. */
+    fun onCaptureFailed(message: String) {
+        if (_state.value !is UiState.Working) _state.value = UiState.Idle(message)
+    }
+
+    /** A screen frame saved by ScreenCaptureService: OCR it like any photo, then delete it. */
+    fun onScreenCaptured(file: File) {
+        launchImages(note = null, cleanup = mutableListOf(file)) { listOf(Uri.fromFile(file)) }
     }
 
     /** PDF import: every page (up to PdfLimits.MAX_PAGES) is rendered and OCR'd, then the same pipeline runs. */
@@ -93,7 +160,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         job = viewModelScope.launch {
             _state.value = UiState.Working(Stage.OPENING_PDF, fromPdf = true)
             var totalPages = 0
-            val lines = try {
+            val read = try {
                 ocr.readPdf(
                     uri,
                     onOpened = { total -> totalPages = total },
@@ -101,7 +168,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         val more = if (totalPages > toRead) " (first $toRead of $totalPages)" else ""
                         _state.value = UiState.Working(Stage.READING_TEXT, detail = "Reading page $page of $toRead$more", fromPdf = true)
                     }
-                ).lines
+                )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: PdfException) {
@@ -114,12 +181,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 )
                 return@launch
             }
+            val lines = read.result.lines
             if (lines.isEmpty()) {
                 _state.value = UiState.Idle("No readable text found in that PDF. If it's a faint scan, try scanning the paper copy instead.")
                 return@launch
             }
             lastLines = lines
-            lastNote = PdfLimits.skippedNote(totalPages)
+            lastNote = PdfLimits.readNote(read.totalPages, read.failedPages)
             lastFromPdf = true
             extractAndVerify(lines, note = lastNote, fromPdf = true)
         }
@@ -263,6 +331,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private companion object {
+        private const val SHARED_FILE_ERROR = "NoticePilot couldn't open the shared file. Try sharing it again, or save it to your phone first."
+
         private val TIME = Regex("""^([01]?\d|2[0-3])[:.]([0-5]\d)$""")
 
         /** "9:30" / "09.30" -> "09:30"; anything else -> null. */

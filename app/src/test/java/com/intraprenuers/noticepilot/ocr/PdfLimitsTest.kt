@@ -46,4 +46,13 @@ class PdfLimitsTest {
         assertNull(PdfLimits.skippedNote(PdfLimits.MAX_PAGES))
         assertTrue(PdfLimits.skippedNote(23)!!.contains("first ${PdfLimits.MAX_PAGES} of 23"))
     }
+
+    @Test fun readNoteCombinesSkippedAndFailedPages() {
+        assertNull(PdfLimits.readNote(3, emptyList()))
+        assertEquals("Page 2 couldn't be rendered and was not read.", PdfLimits.readNote(3, listOf(2)))
+        assertEquals("Pages 2, 5 couldn't be rendered and were not read.", PdfLimits.readNote(6, listOf(2, 5)))
+        val both = PdfLimits.readNote(12, listOf(4))!!
+        assertTrue(both.startsWith("Only the first ${PdfLimits.MAX_PAGES} of 12 pages were read."))
+        assertTrue(both.endsWith("Page 4 couldn't be rendered and was not read."))
+    }
 }

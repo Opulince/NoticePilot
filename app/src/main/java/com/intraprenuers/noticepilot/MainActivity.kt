@@ -1,6 +1,12 @@
 package com.intraprenuers.noticepilot
 
+import android.Manifest
+import android.app.Activity
 import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.media.projection.MediaProjectionManager
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -17,6 +23,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.intraprenuers.noticepilot.calendar.CalendarIntents
+import com.intraprenuers.noticepilot.capture.CaptureActions
+import com.intraprenuers.noticepilot.capture.CaptureHandoff
+import com.intraprenuers.noticepilot.capture.ScreenCaptureService
+import com.intraprenuers.noticepilot.share.ShareIntents
 import com.intraprenuers.noticepilot.scan.DocumentScan
 import com.intraprenuers.noticepilot.scan.PdfPicker
 import com.intraprenuers.noticepilot.scan.PhotoPicker
@@ -45,6 +55,30 @@ class MainActivity : ComponentActivity() {
 
     private val pdfLauncher = registerForActivityResult(PdfPicker.contract) { uri ->
         if (uri != null) viewModel.processPdf(uri) // null = user cancelled: stay on home
+    }
+
+    /** Screen-capture consent (one token per capture: Android never lets us reuse it). */
+    private val captureConsentLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val data = result.data
+        if (result.resultCode == Activity.RESULT_OK && data != null) {
+            try {
+                ScreenCaptureService.start(this, result.resultCode, data)
+                viewModel.onCaptureStarted()
+                // Step aside so the capture shows the notice, not NoticePilot. No toast here: it would be
+                // on screen during the capture and get OCR'd as part of the notice.
+                moveTaskToBack(true)
+            } catch (e: Exception) {
+                CaptureHandoff.inProgress = false
+                viewModel.onCaptureFailed("Screen capture couldn't start (${e.javaClass.simpleName}).")
+            }
+        } else {
+            viewModel.onCaptureFailed("Screen capture cancelled.")
+        }
+    }
+
+    /** Asked once, on first tile use, only for the "Screen captured, tap to read" notification. */
+    private val notificationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        launchCaptureConsent() // continue either way
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -94,6 +128,68 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+        // Only on a fresh start: after rotation the system re-delivers the original intent.
+        if (savedInstanceState == null) handleIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // A finished screen capture waits here even if Android didn't let the service bring us forward.
+        when (val outcome = CaptureHandoff.take()) {
+            is CaptureHandoff.Outcome.Captured -> viewModel.onScreenCaptured(outcome.file)
+            is CaptureHandoff.Outcome.Failed -> viewModel.onCaptureFailed(outcome.message)
+            null -> Unit
+        }
+    }
+
+    /** Share sheet, Quick Settings tile and capture-done intents. Each intent is handled once. */
+    private fun handleIntent(intent: Intent?) {
+        if (intent == null) return
+        when (intent.action) {
+            CaptureActions.ACTION_TILE_CAPTURE -> startTileCapture()
+            Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE -> when (val shared = ShareIntents.parse(intent)) {
+                is ShareIntents.Shared.Single -> viewModel.onSharedFileReceived(shared.uri, shared.mimeType)
+                is ShareIntents.Shared.Multiple -> viewModel.onSharedFilesReceived(shared.uris)
+                null -> toast("Nothing NoticePilot can read was shared.")
+            }
+            else -> return // MAIN, CAPTURE_DONE (picked up in onResume), etc.
+        }
+        intent.action = null
+    }
+
+    private fun startTileCapture() {
+        if (CaptureHandoff.inProgress) {
+            toast("A screen capture is already in progress.")
+            return
+        }
+        val needsAsk = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED &&
+            !askedForNotifications
+        if (needsAsk) {
+            askedForNotifications = true
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            launchCaptureConsent()
+        }
+    }
+
+    private fun launchCaptureConsent() {
+        val manager = getSystemService(MediaProjectionManager::class.java)
+        if (manager == null) {
+            viewModel.onCaptureFailed("Screen capture isn't available on this phone.")
+            return
+        }
+        try {
+            captureConsentLauncher.launch(manager.createScreenCaptureIntent())
+        } catch (e: ActivityNotFoundException) {
+            viewModel.onCaptureFailed("Screen capture isn't available on this phone.")
+        }
     }
 
     private fun startScan() {
@@ -122,4 +218,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+
+    private companion object {
+        /** Per process: we ask for the notification permission at most once per app run. */
+        var askedForNotifications = false
+    }
 }

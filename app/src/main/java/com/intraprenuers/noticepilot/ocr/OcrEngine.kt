@@ -7,6 +7,7 @@ import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import com.google.mlkit.vision.common.InputImage
+import com.intraprenuers.noticepilot.io.CacheFiles
 import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -36,13 +37,18 @@ class OcrEngine(private val context: Context) {
         return OcrResult(lines)
     }
 
+    /** What a PDF read produced: the lines plus an honest account of which pages were (not) read. */
+    data class PdfRead(val result: OcrResult, val totalPages: Int, val pagesRead: Int, val failedPages: List<Int>)
+
     /**
      * Renders each PDF page (up to [PdfLimits.MAX_PAGES]) to a bitmap and OCRs it, one page at a time.
      * Works the same for scanned and text PDFs, because every page is rendered and read as an image.
+     * A page that fails to render is recorded in [PdfRead.failedPages] and skipped; if no page at all
+     * could be read, [PdfException] is thrown.
      * [onOpened] gets the total page count; [onPage] is called before each page with (pageNumber, pagesToRead).
      */
-    suspend fun readPdf(uri: Uri, onOpened: (totalPages: Int) -> Unit, onPage: (page: Int, toRead: Int) -> Unit): OcrResult {
-        val copy = withContext(Dispatchers.IO) { copyToCache(uri) }
+    suspend fun readPdf(uri: Uri, onOpened: (totalPages: Int) -> Unit, onPage: (page: Int, toRead: Int) -> Unit): PdfRead {
+        val copy = withContext(Dispatchers.IO) { copyPdfToCache(uri) }
         try {
             val fd = try {
                 ParcelFileDescriptor.open(copy, ParcelFileDescriptor.MODE_READ_ONLY)
@@ -62,11 +68,17 @@ class OcrEngine(private val context: Context) {
                     if (total <= 0) throw PdfException("This PDF has no pages.", "pageCount=$total")
                     onOpened(total)
                     val lines = mutableListOf<OcrLine>()
+                    val failed = mutableListOf<Int>()
                     val toRead = PdfLimits.pagesToRead(total)
                     for (i in 0 until toRead) {
                         currentCoroutineContext().ensureActive()
                         onPage(i + 1, toRead)
-                        val bitmap = withContext(Dispatchers.IO) { renderPage(renderer, i) }
+                        val bitmap = try {
+                            withContext(Dispatchers.IO) { renderPage(renderer, i) }
+                        } catch (e: PdfException) {
+                            failed += i + 1
+                            continue
+                        }
                         try {
                             val text = recognizer.process(InputImage.fromBitmap(bitmap, 0)).await()
                             addLines(text, page = i + 1, into = lines)
@@ -74,7 +86,10 @@ class OcrEngine(private val context: Context) {
                             bitmap.recycle()
                         }
                     }
-                    return OcrResult(lines)
+                    if (failed.size == toRead) {
+                        throw PdfException("None of this PDF's pages could be rendered.", "failed pages: $failed")
+                    }
+                    return PdfRead(OcrResult(lines), totalPages = total, pagesRead = toRead - failed.size, failedPages = failed)
                 } finally {
                     renderer.close() // also closes fd
                 }
@@ -114,42 +129,21 @@ class OcrEngine(private val context: Context) {
     }
 
     /**
-     * Copies the picked document into app cache. Picker URIs may be cloud-backed or non-seekable and only
-     * readable while the permission lasts; PdfRenderer needs a seekable file descriptor.
+     * Copies the picked/shared PDF into app cache (unique name). Picker and share URIs may be cloud-backed,
+     * non-seekable or only readable while the permission lasts; PdfRenderer needs a seekable local file.
      */
-    private fun copyToCache(uri: Uri): File {
-        val out = File(context.cacheDir, "import.pdf")
+    private fun copyPdfToCache(uri: Uri): File =
         try {
-            val input = context.contentResolver.openInputStream(uri)
-                ?: throw PdfException(CANT_OPEN, "openInputStream returned null")
-            input.use { src ->
-                out.outputStream().use { dst ->
-                    val buf = ByteArray(64 * 1024)
-                    var total = 0L
-                    while (true) {
-                        val n = src.read(buf)
-                        if (n < 0) break
-                        total += n
-                        if (total > PdfLimits.MAX_BYTES) {
-                            throw PdfException("This PDF is too large (over ${PdfLimits.MAX_BYTES / (1024 * 1024)} MB).", "size > ${PdfLimits.MAX_BYTES}")
-                        }
-                        dst.write(buf, 0, n)
-                    }
-                    if (total == 0L) throw PdfException("This PDF file is empty.", "0 bytes")
-                }
-            }
-            return out
-        } catch (e: PdfException) {
-            out.delete()
-            throw e
+            CacheFiles.copy(context, uri, prefix = "pdf", extension = "pdf", maxBytes = PdfLimits.MAX_BYTES)
+        } catch (e: CacheFiles.TooLargeException) {
+            throw PdfException("This PDF is too large (over ${PdfLimits.MAX_BYTES / (1024 * 1024)} MB).", "size > ${PdfLimits.MAX_BYTES}", e)
+        } catch (e: CacheFiles.EmptyException) {
+            throw PdfException("This PDF file is empty.", "0 bytes", e)
         } catch (e: SecurityException) {
-            out.delete()
             throw PdfException(CANT_OPEN, "SecurityException: ${e.message}", e)
         } catch (e: IOException) {
-            out.delete()
             throw PdfException(CANT_OPEN, "${e.javaClass.simpleName}: ${e.message}", e)
         }
-    }
 
     private fun addLines(text: Text, page: Int, into: MutableList<OcrLine>) {
         for (block in text.textBlocks) {
