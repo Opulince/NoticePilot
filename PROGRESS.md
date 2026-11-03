@@ -38,7 +38,7 @@
 - Model name lives only in `extract/GeminiConfig.MODEL_NAME`.
 
 ## 6. Decisions & Constraints
-- Model `gemini-3.8-flash` (current stable Flash in the official docs, Nov 2026). Fallback if it 404s: `gemini-3.6-flash`.
+- Model `gemini-3.6-flash` (stable, previous-gen Flash). Switched from `gemini-3.8-flash`, which returned 503 "experiencing high demand" on the phone. Other option: `gemini-3.5-flash-lite`.
 - `responseSchema` was kept, not the newer `responseFormat.text.schema` that the docs also show. CLAUDE.md asks for `responseSchema`, and it is still documented for generateContent. If the API rejects it, switch only `ExtractionPrompt.buildRequestBody`.
 - AGP 8.13.2 was chosen over the newest 9.5, because it is supported by any 2025+ Android Studio and needs no AGP 9 built-in-Kotlin changes. AndroidX versions are pinned to that generation (Compose BOM 2025.10.01).
 - No rehearsal Gradle cache existed in the repo, so the first sync downloads everything. Do it before the event.
